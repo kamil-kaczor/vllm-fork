@@ -35,6 +35,31 @@ class BaseLogitsProcessor:
     def __init__(self, guide: Guide):
         self._guide: Guide = guide
         self._fsm_state: DefaultDict[int, int] = defaultdict(int)
+        # _get_mask_tensor should be cached per instance
+        # but we don't want lru_cache to capture 'self'
+        # more info: https://stackoverflow.com/a/68550238
+        self._cached_get_mask_tensor = lru_cache(maxsize=128)(
+            self._get_mask_tensor)
+
+    @staticmethod
+    @lru_cache(maxsize=128)
+    def _create_mask_tensor(allowed_tokens, vocab_size, device):
+        mask = torch.full((vocab_size, ), -math.inf, device=device)
+        mask[list(allowed_tokens)] = 0
+        return mask
+
+    def _get_mask_tensor(self, state_id, vocab_size, device):
+        instruction = self._guide.get_next_instruction(state=state_id)
+        if type(instruction) == Generate:  # noqa: E721
+            allowed_tokens = instruction.tokens
+        elif type(instruction) == Write:  # noqa: E721
+            # TODO: support fast forward tokens
+            allowed_tokens = [instruction.tokens[0]]
+        else:
+            raise TypeError(
+                f"Unsupported instruction type {type(instruction)}")
+        return BaseLogitsProcessor._create_mask_tensor(tuple(allowed_tokens),
+                                                       vocab_size, device)
 
     def __call__(self, input_ids: List[int],
                  scores: torch.Tensor) -> torch.Tensor:
@@ -64,23 +89,10 @@ class BaseLogitsProcessor:
                     import_paths=[grammars.GRAMMAR_PATH],
                 )
 
-        instruction = self._guide.get_next_instruction(
-            state=self._fsm_state[seq_id])
-
-        if type(instruction) == Generate:  # noqa: E721
-            allowed_tokens = instruction.tokens
-        elif type(instruction) == Write:  # noqa: E721
-            # TODO: support fast forward tokens
-            allowed_tokens = [instruction.tokens[0]]
-        else:
-            raise TypeError(
-                f"Unsupported instruction type {type(instruction)}")
-
-        mask = torch.full((scores.shape[-1], ),
-                          -math.inf,
-                          device=scores.device)
-        mask[allowed_tokens] = 0
-        scores = scores.add(mask)
+        state_id = self._fsm_state[seq_id]
+        mask = self._cached_get_mask_tensor(state_id, scores.size(-1),
+                                            scores.device)
+        scores.add_(mask)
         return scores
 
 
