@@ -30,16 +30,25 @@ from pydantic import BaseModel
 from transformers import PreTrainedTokenizerBase
 
 
+# Unfortunately we cannot use lru_cache as it breaks pickling
+# so we use a simpler implementation
+def _cached(fn):
+    cache = {}
+    def cached_fn(*args):
+        if args in cache:
+            result = cache[args]
+        else:
+            result = fn(*args)
+            cache[args] = result
+        return result
+    return cached_fn
+
 class BaseLogitsProcessor:
 
     def __init__(self, guide: Guide):
         self._guide: Guide = guide
         self._fsm_state: DefaultDict[int, int] = defaultdict(int)
-        # _get_mask_tensor should be cached per instance
-        # but we don't want lru_cache to capture 'self'
-        # more info: https://stackoverflow.com/a/68550238
-        self._cached_get_mask_tensor = lru_cache(maxsize=128)(
-            self._get_mask_tensor)
+        self._cached_get_mask_tensor = _cached(self._get_mask_tensor)
 
     @staticmethod
     @lru_cache(maxsize=128)
