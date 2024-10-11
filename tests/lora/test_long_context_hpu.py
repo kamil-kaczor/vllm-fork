@@ -121,6 +121,7 @@ def lora_llm(long_context_infos):
         long_lora_scaling_factors=tuple(scaling_factors),
         max_num_batched_tokens=4096 * 8,
         tensor_parallel_size=1,
+        enforce_eager=True,
         dtype=torch.bfloat16,
         disable_async_output_proc=True,  # TODO Remove after SW-204469 is fixed.
         distributed_executor_backend="mp")
