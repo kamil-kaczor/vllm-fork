@@ -11,8 +11,12 @@ from vllm.lora.layers import LinearScalingRotaryEmbeddingWithLora
 from vllm.lora.request import LoRARequest
 from vllm.model_executor.layers.rotary_embedding import (
     LinearScalingRotaryEmbedding)
+from vllm.model_executor.models import ModelRegistry
 
 from .data.long_context_test_data import prompts_and_responses
+
+# TODO Remove after SW-205127 is fixed.
+ModelRegistry.is_multimodal_model = lambda x: False
 
 context_len_to_scaling_factor = {
     "16k": 4,
@@ -118,7 +122,6 @@ def lora_llm(long_context_infos):
         max_num_batched_tokens=4096 * 8,
         tensor_parallel_size=1,
         dtype=torch.bfloat16,
-        enforce_eager=True,
         disable_async_output_proc=True,  # TODO Remove after SW-204469 is fixed.
         distributed_executor_backend="mp")
     yield llm
