@@ -134,12 +134,16 @@ def lora_llm(long_context_infos):
 def test_rotary_emb_replaced(dist_init):
     """Verify rotary emb in all the layers are replaced"""
     from vllm.engine.arg_utils import EngineArgs
-    from vllm.worker.hpu_model_runner import HPUModelRunner
+    if current_platform.is_hpu():
+        from vllm.worker.hpu_model_runner import HPUModelRunner as ModelRunner
+    else:
+        from vllm.worker.model_runner import ModelRunner
+
     engine_args = EngineArgs("meta-llama/Llama-2-7b-hf",
                              long_lora_scaling_factors=(4.0, ),
                              enable_lora=True)
     engine_config = engine_args.create_engine_config()
-    model_runner = HPUModelRunner(
+    model_runner = ModelRunner(
         model_config=engine_config.model_config,
         parallel_config=engine_config.parallel_config,
         scheduler_config=engine_config.scheduler_config,
@@ -151,8 +155,12 @@ def test_rotary_emb_replaced(dist_init):
     )
     model_runner.load_model()
     rotary_emb_count = 0
-    for module_name, module in model_runner.model.model.named_modules(
-            remove_duplicate=False):
+
+    if current_platform.is_hpu():
+        model = model_runner.model.model
+    else:
+        model = model_runner.model
+    for module_name, module in model.named_modules(remove_duplicate=False):
         if "rotary_emb" in module_name:
             if "base_layer" not in module_name:
                 rotary_emb_count += 1
