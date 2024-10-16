@@ -4,6 +4,7 @@ from typing import List, Optional, Tuple
 import numpy as np
 import pytest
 import torch
+from vllm_hpu_extension.rotary_embed import HpuLinearScalingRotaryEmbedding
 
 import vllm
 from vllm import SamplingParams
@@ -12,6 +13,7 @@ from vllm.lora.request import LoRARequest
 from vllm.model_executor.layers.rotary_embedding import (
     LinearScalingRotaryEmbedding)
 from vllm.model_executor.models import ModelRegistry
+from vllm.platforms import current_platform
 
 from .data.long_context_test_data import prompts_and_responses
 
@@ -33,7 +35,7 @@ sampling_params = SamplingParams(
 def _create_lora_request(lora_id, long_context_infos):
     context_len = long_context_infos[lora_id]["context_length"]
     scaling_factor = context_len_to_scaling_factor[context_len]
-    return LoRARequest(context_len, lora_id,
+    return LoRARequest(context_len + '_' + str(lora_id), lora_id,
                        long_context_infos[lora_id]["lora"], None,
                        4096 * scaling_factor)
 
@@ -117,11 +119,11 @@ def lora_llm(long_context_infos):
         "meta-llama/Llama-2-13b-chat-hf",
         enable_lora=True,
         max_num_seqs=16,
-        max_loras=3,
+        max_loras=2,
         long_lora_scaling_factors=tuple(scaling_factors),
         max_num_batched_tokens=4096 * 8,
         tensor_parallel_size=1,
-        enforce_eager=True,
+        enforce_eager=True,  # TODO Remove after SW-205153 is fixed
         dtype=torch.bfloat16,
         disable_async_output_proc=True,  # TODO Remove after SW-204469 is fixed.
         distributed_executor_backend="mp")
@@ -132,12 +134,12 @@ def lora_llm(long_context_infos):
 def test_rotary_emb_replaced(dist_init):
     """Verify rotary emb in all the layers are replaced"""
     from vllm.engine.arg_utils import EngineArgs
-    from vllm.worker.model_runner import ModelRunner
+    from vllm.worker.hpu_model_runner import HPUModelRunner
     engine_args = EngineArgs("meta-llama/Llama-2-7b-hf",
                              long_lora_scaling_factors=(4.0, ),
                              enable_lora=True)
     engine_config = engine_args.create_engine_config()
-    model_runner = ModelRunner(
+    model_runner = HPUModelRunner(
         model_config=engine_config.model_config,
         parallel_config=engine_config.parallel_config,
         scheduler_config=engine_config.scheduler_config,
@@ -149,14 +151,17 @@ def test_rotary_emb_replaced(dist_init):
     )
     model_runner.load_model()
     rotary_emb_count = 0
-    for module_name, module in model_runner.model.named_modules(
+    for module_name, module in model_runner.model.model.named_modules(
             remove_duplicate=False):
         if "rotary_emb" in module_name:
             if "base_layer" not in module_name:
                 rotary_emb_count += 1
                 assert isinstance(module, LinearScalingRotaryEmbeddingWithLora)
             else:
-                assert isinstance(module, LinearScalingRotaryEmbedding)
+                if current_platform.is_hpu():
+                    assert isinstance(module, HpuLinearScalingRotaryEmbedding)
+                else:
+                    assert isinstance(module, LinearScalingRotaryEmbedding)
     # Llama 2 has 32 layers.
     assert rotary_emb_count == 32
 
