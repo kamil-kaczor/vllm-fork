@@ -175,14 +175,14 @@ def generate_decode_buckets(bs_bucket_config, blocks_bucket_config,
     bs_buckets = warmup_range(bs_bucket_config)
     block_buckets = warmup_range(blocks_bucket_config)
     bmin, bstep, bmax = blocks_bucket_config
-    block_buckets.append(block_buckets[-1] + bstep)
-    last_bucket = round_up(max_blocks, bstep)
+    last_bucket = max_blocks
     
     for bs in bs_buckets:
         for blocks in block_buckets:
             if blocks < bs:
                 continue
             if blocks > last_bucket:
+                buckets.append((bs, last_bucket)) 
                 break
             buckets.append((bs, blocks))
     return list(sorted(buckets, key=lambda b: (b[0] * b[1], b[1], b[0])))
@@ -1030,20 +1030,20 @@ class HabanaModelRunnerBase(ModelRunnerBase[TModelInputForHPU]):
             max_blocks = max(max_idx+1, len(block_list))
             block_bucket_size = find_bucket(max_blocks, self.decode_block_bucket_cfg)
             #print('MAX_BLOCKS:', max_blocks, 'block_list:', len(block_list),'BLOCK_BUCKET_SIZE:', block_bucket_size, flush=True)
+            block_bucket_size = min(block_bucket_size, self.cache_config.num_gpu_blocks)
             block_mapping = [None] * block_bucket_size
             block_usage = [None] * block_bucket_size
-            block_list = [None] * block_bucket_size
+
             for i, bt1 in enumerate(block_tables):
                 for b_u in bt1:
                     if block_mapping[b_u] is None:
                         block_mapping[b_u]= i
                         block_usage[b_u]= self.block_size
-                        block_list[b_u] = b_u
             block_mapping = [b if b is not None else -1 for b in block_mapping]
             for bt, sl in zip(block_tables, slot_mapping):
                 block_usage[bt[-1]] = sl[-1] % self.block_size + 1
             block_usage = [u if u is not None else 0 for u in block_usage]
-            block_list = [l if l is not None else 0 for l in block_list]
+
         block_list = pad_list(block_list, block_bucket_size, _PAD_SLOT_ID)
         block_mapping = pad_list(block_mapping, block_bucket_size, 0)
         block_usage = pad_list(block_usage, block_bucket_size, 0)

@@ -61,9 +61,6 @@ class VLLMKVCache(torch.nn.Module):
         if False:
             return cache.index_select(0, blocks)
         else:
-            if cache.size(0) < blocks.size(0):
-                return cache.index_select(0, blocks)
-            else:
-                return cache[:blocks.size(0)]
+            return cache[:blocks.size(0)]
             
             
