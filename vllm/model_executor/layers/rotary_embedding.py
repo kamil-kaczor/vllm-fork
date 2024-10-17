@@ -970,8 +970,8 @@ def get_rope(
                 )
             else:
                 if current_platform.is_hpu():
-                    from vllm_hpu_extension.rotary_embed \
-                        import HpuRotaryEmbedding
+                    from vllm_hpu_extension.rotary_embed import (
+                        HpuRotaryEmbedding)
                     rotary_emb = HpuRotaryEmbedding(
                         head_size,
                         rotary_dim,
