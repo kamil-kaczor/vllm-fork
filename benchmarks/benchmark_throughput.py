@@ -92,6 +92,7 @@ def run_vllm(
     disable_async_output_proc: bool = False,
     weights_load_device: str = None,
     use_padding_aware_scheduling: bool = False,
+    max_num_seqs: int = 256,
     max_num_prefill_seqs: int = None,
 ) -> float:
     from vllm import LLM, SamplingParams
@@ -120,6 +121,7 @@ def run_vllm(
         disable_async_output_proc=disable_async_output_proc,
         weights_load_device=weights_load_device,
         use_padding_aware_scheduling=use_padding_aware_scheduling,
+        max_num_seqs=max_num_seqs,
         max_num_prefill_seqs=max_num_prefill_seqs,
     )
 
@@ -189,6 +191,7 @@ async def run_vllm_async(
     disable_frontend_multiprocessing: bool = False,
     weights_load_device: str = None,
     use_padding_aware_scheduling: bool = False,
+    max_num_seqs: int = 256,
     max_num_prefill_seqs: int = None,
 ) -> float:
     from vllm import SamplingParams
@@ -355,7 +358,7 @@ def main(args: argparse.Namespace):
             args.gpu_memory_utilization, args.num_scheduler_steps,
             args.use_v2_block_manager, args.download_dir, args.load_format,
             args.disable_async_output_proc, args.weights_load_device,
-            args.use_padding_aware_scheduling, args.max_num_prefill_seqs
+            args.use_padding_aware_scheduling, args.max_num_seqs, args.max_num_prefill_seqs
         ]
 
         if args.async_engine:
@@ -562,6 +565,10 @@ if __name__ == "__main__":
                         action='store_true',
                         default=False,
                         help="Enable padding-aware scheduling.")
+    parser.add_argument("--max-num-seqs",
+                        type=int,
+                        default=256,
+                        help="Maximum number of requests for single decode.")
     parser.add_argument("--max-num-prefill-seqs",
                         type=int,
                         default=None,
