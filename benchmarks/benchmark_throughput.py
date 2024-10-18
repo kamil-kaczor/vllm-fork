@@ -358,7 +358,8 @@ def main(args: argparse.Namespace):
             args.gpu_memory_utilization, args.num_scheduler_steps,
             args.use_v2_block_manager, args.download_dir, args.load_format,
             args.disable_async_output_proc, args.weights_load_device,
-            args.use_padding_aware_scheduling, args.max_num_seqs, args.max_num_prefill_seqs
+            args.use_padding_aware_scheduling, args.max_num_seqs,
+            args.max_num_prefill_seqs
         ]
 
         if args.async_engine:
